@@ -52,7 +52,8 @@ void Server::start() {
 
     cout << "Server listening on port " << port_ << "...\n";
 
-    // 5. Accept a client
+  // 5. Accept clients forever
+while (true) {
     SOCKET clientSocket;
     sockaddr_in clientAddr{};
     int clientSize = sizeof(clientAddr);
@@ -60,24 +61,48 @@ void Server::start() {
     clientSocket = accept(server_fd_, (sockaddr*)&clientAddr, &clientSize);
     if (clientSocket == INVALID_SOCKET) {
         cerr << "Accept failed\n";
-        closesocket(server_fd_);
-        WSACleanup();
-        return;
+        continue; // keep server running
     }
 
-    std::cout << "Client connected!\n";
+    cout << "Client connected!\n";
 
-    // 6. Simple echo: receive message and send it back
+    // 6. Handle client messages in a loop (line-based)
     char buffer[1024];
-    int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (bytesReceived > 0) {
-        buffer[bytesReceived] = '\0'; // Null terminate
-        std::cout << "Received: " << buffer << "\n";
-        send(clientSocket, buffer, bytesReceived, 0);
+    std::string message;
+
+    while (true) {
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived > 0) {
+            buffer[bytesReceived] = '\0';
+            message += buffer;
+
+            // Telnet sends CRLF ("\r\n") when you press Enter
+            size_t pos;
+            while ((pos = message.find("\r\n")) != std::string::npos) {
+                std::string line = message.substr(0, pos);
+                message.erase(0, pos + 2);
+
+                cout << "Received: " << line << "\n";
+
+                // Echo back the whole line once
+                send(clientSocket, line.c_str(), line.size(), 0);
+            }
+        }
+        else if (bytesReceived == 0) {
+            cout << "Client disconnected.\n";
+            break; // exit client loop
+        }
+        else {
+            cerr << "recv() failed.\n";
+            break;
+        }
     }
 
-    // 7. Cleanup
-    closesocket(clientSocket);
-    closesocket(server_fd_);
-    WSACleanup();
+    closesocket(clientSocket); // ✅ close this client only
+}
+
+// only runs when server shuts down (not reached in infinite loop yet)
+closesocket(server_fd_);
+WSACleanup();
+
 }
