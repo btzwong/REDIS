@@ -1,5 +1,8 @@
 #include "server.h"
+#include "command.h"
+#include "datastore.h"
 #include <iostream>
+
 
 // Windows socket headers
 #include <winsock2.h>
@@ -70,6 +73,8 @@ while (true) {
     char buffer[1024];
     std::string message;
 
+    DataStore db;
+
     while (true) {
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived > 0) {
@@ -85,7 +90,24 @@ while (true) {
                 cout << "Received: " << line << "\n";
 
                 // Echo back the whole line once
-                send(clientSocket, line.c_str(), line.size(), 0);
+                auto tokens = Command::parse(line);
+
+            string response;
+            if (tokens.empty()) {
+                response = "(error) empty command";
+            }
+            else if (tokens[0] == "SET" && tokens.size() >= 3) {
+                db.set(tokens[1], tokens[2]);
+                response = "OK";
+            }
+            else if (tokens[0] == "GET" && tokens.size() >= 2) {
+                response = db.get(tokens[1]);
+            }
+            else {
+                response = "(error) unknown command";
+            }
+
+            send(clientSocket, response.c_str(), response.size(), 0);
             }
         }
         else if (bytesReceived == 0) {
@@ -98,7 +120,7 @@ while (true) {
         }
     }
 
-    closesocket(clientSocket); // ✅ close this client only
+    closesocket(clientSocket); 
 }
 
 // only runs when server shuts down (not reached in infinite loop yet)
